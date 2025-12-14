@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Retro Mac Memory Math</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load VT323 Font for the Retro Aesthetic -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+
+    <style>
+        /* Base styling for the Retro Mac look */
+        body {
+            font-family: 'VT323', monospace;
+            background-color: #f0f0f0;
+            color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 10px;
+            box-sizing: border-box;
+            background-image: linear-gradient(45deg, #ccc 25%, transparent 25%),
+                              linear-gradient(-45deg, #ccc 25%, transparent 25%),
+                              linear-gradient(45deg, transparent 75%, #ccc 75%),
+                              linear-gradient(-45deg, transparent 75%, #ccc 75%);
+            background-size: 8px 8px; /* Larger pattern for retro feel */
+        }
+
+        /* The main application window style */
+        .window {
+            width: 100%;
+            max-width: 600px;
+            background-color: #fff;
+            border: 2px solid #000;
+            box-shadow: 4px 4px 0 0 #000; /* Classic drop shadow */
+        }
+
+        /* Title bar style */
+        .title-bar {
+            background-color: #000;
+            color: #fff;
+            padding: 4px 8px;
+            font-size: 1.25rem; /* text-xl */
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* Close/controls box style */
+        .control-box {
+            width: 12px;
+            height: 12px;
+            background-color: #fff;
+            border: 1px solid #000;
+        }
+
+        /* Card container for 3D flip */
+        .card-container {
+            perspective: 1000px; /* For 3D effect */
+            width: 100%;
+            height: 100%;
+        }
+
+        /* The card element itself */
+        .card {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+            cursor: pointer;
+            border: 2px solid #000;
+        }
+
+        /* The card faces */
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.5rem; /* Larger for mobile tap targets */
+            font-weight: bold;
+            background-color: #fff;
+            border-radius: 0;
+        }
+
+        /* Front (Answer side - hidden initially) */
+        .card-front {
+            background-color: #fff;
+            color: #000;
+            transform: rotateY(180deg);
+        }
+
+        /* Back (Design side - visible initially) */
+        .card-back {
+            background-color: #d1d5db; /* Gray background for the card back */
+            color: #000;
+            border-left: 4px solid #000;
+            border-bottom: 4px solid #000;
+            /* Simple retro pattern for the back */
+            background-image: repeating-linear-gradient(
+                -45deg,
+                #00000022,
+                #00000022 2px,
+                #d1d5db 2px,
+                #d1d5db 4px
+            );
+        }
+
+        /* Class to flip the card (used on the .card element) */
+        .flipped {
+            transform: rotateY(180deg);
+        }
+
+        /* Button styling */
+        .retro-btn {
+            background-color: #fff;
+            border: 2px solid #000;
+            box-shadow: 2px 2px 0 0 #000;
+            transition: all 0.05s ease-out;
+            user-select: none;
+            cursor: pointer;
+        }
+        .retro-btn:active {
+            box-shadow: 0 0 0 0 #000;
+            transform: translate(2px, 2px);
+        }
+
+        /* Problem and Feedback Display */
+        #problem-container {
+            font-size: 3.5rem; /* text-6xl */
+            min-height: 4rem;
+        }
+        #feedback {
+            min-height: 2rem;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="game-window" class="window p-4">
+        <!-- Title Bar -->
+        <div class="title-bar mb-4">
+            <span>💾 Memory Math Facts</span>
+            <div class="control-box"></div>
+        </div>
+
+        <div class="text-center space-y-4">
+            <!-- Score and Status -->
+            <div class="flex justify-between text-lg md:text-xl p-2 border-b-2 border-t-2 border-black">
+                <span id="score-display">Score: 0</span>
+                <span id="streak-display">Streak: 0</span>
+                <span id="high-score-display">High: 0</span>
+            </div>
+
+            <!-- Problem Display Area -->
+            <div id="problem-container" class="font-bold text-center p-4 bg-gray-200 border-2 border-black shadow-[2px_2px_0_0_#000] h-24 flex items-center justify-center">
+                Press START to begin!
+            </div>
+
+            <!-- Card Grid -->
+            <div id="card-grid" class="grid grid-cols-2 gap-4 my-6">
+                <!-- Cards will be injected here -->
+            </div>
+
+            <!-- Feedback Area -->
+            <div id="feedback" class="text-xl text-center font-bold h-8 flex items-center justify-center"></div>
+
+            <!-- Control Buttons -->
+            <div class="flex justify-center space-x-4 pt-4 border-t-2 border-black">
+                <button id="start-btn" class="retro-btn p-3 text-2xl" onclick="startGame()">START GAME</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Game State Variables
+        let score = 0;
+        let streak = 0;
+        let highScore = 0;
+        let currentProblem = null;
+        let isGameActive = false;
+        let isMemorizationPhase = false;
+        let isQuestionPhase = false;
+        let cardElements = [];
+
+        // DOM Elements
+        const scoreDisplay = document.getElementById('score-display');
+        const streakDisplay = document.getElementById('streak-display');
+        const highScoreDisplay = document.getElementById('high-score-display');
+        const problemContainer = document.getElementById('problem-container');
+        const cardGrid = document.getElementById('card-grid');
+        const feedback = document.getElementById('feedback');
+        const startBtn = document.getElementById('start-btn');
+
+        // --- Utility Functions ---
+
+        /**
+         * Generates a multiplication problem and three decoy answers.
+         * @returns {{problem: string, answer: number, answers: number[], correctCardIndex: number}}
+         */
+        function makeProblem() {
+            // Factors between 2 and 11
+            const factor1 = Math.floor(Math.random() * 10) + 2;
+            const factor2 = Math.floor(Math.random() * 10) + 2;
+            const answer = factor1 * factor2;
+            const problem = `${factor1} \u00D7 ${factor2}`; // Multiplication symbol
+
+            // Generate 3 decoys
+            let decoys = [];
+            while (decoys.length < 3) {
+                let decoy;
+                // Generate a random offset (1, 2, or 5)
+                const possibleOffsets = [1, 2, 5];
+                const offset = possibleOffsets[Math.floor(Math.random() * possibleOffsets.length)];
+                const sign = Math.random() < 0.5 ? 1 : -1;
+                decoy = answer + (offset * sign);
+
+                // Ensure decoy is positive, not the correct answer, and unique
+                if (decoy > 0 && decoy !== answer && !decoys.includes(decoy)) {
+                    decoys.push(decoy);
+                }
+            }
+
+            // Combine and shuffle
+            const allAnswers = [answer, ...decoys];
+            allAnswers.sort(() => Math.random() - 0.5);
+
+            // Find the index where the correct answer ended up
+            const correctCardIndex = allAnswers.indexOf(answer);
+
+            return { problem, answer, answers: allAnswers, correctCardIndex };
+        }
+
+        function saveHighScore() {
+            try {
+                localStorage.setItem('mathFactsHighScore', highScore.toString());
+            } catch (e) {
+                console.error("Could not save high score to localStorage:", e);
+            }
+        }
+
+        function loadHighScore() {
+            try {
+                const storedScore = localStorage.getItem('mathFactsHighScore');
+                if (storedScore) {
+                    highScore = parseInt(storedScore, 10);
+                }
+            } catch (e) {
+                console.error("Could not load high score from localStorage:", e);
+            }
+            highScoreDisplay.textContent = `High: ${highScore}`;
+        }
+
+        function updateDisplays() {
+            scoreDisplay.textContent = `Score: ${score}`;
+            streakDisplay.textContent = `Streak: ${streak}`;
+            highScoreDisplay.textContent = `High: ${highScore}`;
+        }
+
+        // --- Card UI Generation ---
+
+        function createCards() {
+            cardGrid.innerHTML = '';
+            cardElements = [];
+            for (let i = 0; i < 4; i++) {
+                const cardWrapper = document.createElement('div');
+                cardWrapper.className = 'card-container h-24 md:h-32 touch-manipulation';
+                cardWrapper.setAttribute('data-index', i);
+
+                const card = document.createElement('div');
+                card.className = 'card shadow-[4px_4px_0_0_#000]';
+                card.setAttribute('data-card-id', i);
+                card.onclick = () => handleCardClick(i);
+
+                const cardFront = document.createElement('div');
+                cardFront.className = 'card-face card-front';
+                cardFront.textContent = '?'; // Placeholder, will be replaced by the answer
+
+                const cardBack = document.createElement('div');
+                cardBack.className = 'card-face card-back text-2xl md:text-3xl';
+                cardBack.textContent = `CARD ${i + 1}`; // Simple text on the back
+
+                card.appendChild(cardFront);
+                card.appendChild(cardBack);
+                cardWrapper.appendChild(card);
+                cardGrid.appendChild(cardWrapper);
+                cardElements.push({ wrapper: cardWrapper, card: card, front: cardFront, back: cardBack });
+            }
+        }
+
+        // --- Game Flow ---
+
+        function startGame() {
+            if (isGameActive) return;
+            isGameActive = true;
+            score = 0;
+            streak = 0;
+            startBtn.textContent = 'RESTART';
+            updateDisplays();
+            feedback.textContent = "Get ready to memorize!";
+            nextProblem();
+        }
+
+        function nextProblem() {
+            if (!isGameActive) return;
+
+            // Reset state
+            isQuestionPhase = false;
+            problemContainer.textContent = '...';
+            feedback.textContent = '';
+
+            // Generate the new problem
+            currentProblem = makeProblem();
+            const { answers } = currentProblem;
+
+            // 1. Setup Cards (Face Up/Memorization Phase)
+            isMemorizationPhase = true;
+            cardElements.forEach((el, index) => {
+                el.card.classList.remove('flipped');
+                el.card.classList.remove('pointer-events-none');
+                el.front.textContent = answers[index];
+                el.card.style.backgroundColor = '#fff'; // Reset background color
+            });
+
+            feedback.textContent = "Memorize the numbers...";
+
+            // 2. Start Memorization Timer
+            setTimeout(() => {
+                // 3. Flip Cards
+                isMemorizationPhase = false;
+                feedback.textContent = "Cards are shuffled! Find the answer.";
+                
+                // Animate the flip
+                cardElements.forEach(el => {
+                    el.card.classList.add('flipped');
+                });
+
+                // 4. Show Question (After flip animation completes)
+                // Use a slight delay greater than the card transition (0.6s)
+                setTimeout(() => {
+                    isQuestionPhase = true;
+                    problemContainer.textContent = currentProblem.problem;
+                    feedback.textContent = "Which card hides the correct answer?";
+                }, 700);
+
+            }, 2000); // 2 seconds to memorize
+        }
+
+        function handleCardClick(clickedIndex) {
+            if (!isGameActive || !isQuestionPhase) {
+                if (isMemorizationPhase) {
+                    feedback.textContent = "Wait! You must memorize before the cards flip.";
+                } else {
+                    feedback.textContent = "Please wait for the question to appear.";
+                }
+                return;
+            }
+
+            // Lock interaction during feedback
+            isQuestionPhase = false;
+            cardElements.forEach(el => el.card.classList.add('pointer-events-none'));
+
+            const { answer, correctCardIndex } = currentProblem;
+            const isCorrect = (clickedIndex === correctCardIndex);
+
+            // 1. Flip the clicked card
+            const clickedCard = cardElements[clickedIndex].card;
+            clickedCard.classList.remove('flipped');
+            
+            // 2. Process Result
+            if (isCorrect) {
+                score += 10;
+                streak++;
+                feedback.textContent = `Correct! (${answer}) +10 Points.`;
+                feedback.style.color = '#006400'; // Dark green for success
+                clickedCard.style.backgroundColor = '#aaffaa'; // Light green highlight
+            } else {
+                streak = 0;
+                feedback.textContent = `Wrong! You picked ${currentProblem.answers[clickedIndex]}. The answer was ${answer}.`;
+                feedback.style.color = '#a00000'; // Dark red for failure
+                clickedCard.style.backgroundColor = '#ffaaaa'; // Light red highlight
+                
+                // Show the correct card as well
+                const correctCard = cardElements[correctCardIndex].card;
+                correctCard.classList.remove('flipped');
+                correctCard.style.backgroundColor = '#aaffaa';
+            }
+            
+            // Update High Score
+            if (score > highScore) {
+                highScore = score;
+                saveHighScore();
+            }
+            updateDisplays();
+            
+            // 3. Wait for feedback and start next problem
+            setTimeout(nextProblem, 2000);
+        }
+        
+        // --- Initialization ---
+
+        window.onload = () => {
+            loadHighScore();
+            createCards();
+            updateDisplays();
+        };
+
+    </script>
+</body>
+</html>
+
