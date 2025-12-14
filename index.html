@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Memory Math Cards</title>
+    <title>Retro Mac Memory Math</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load VT323 Font for the Retro Aesthetic -->
@@ -144,6 +144,15 @@
             min-height: 2rem;
         }
         
+        /* Start Prompt styling */
+        .start-prompt {
+            cursor: pointer;
+            transition: background-color 0.1s;
+        }
+        .start-prompt:hover {
+            background-color: #c9c9c9;
+        }
+
         /* Modal Overlay */
         .modal-overlay {
             position: fixed;
@@ -182,7 +191,7 @@
     <div id="game-window" class="window p-4">
         <!-- Title Bar -->
         <div class="title-bar mb-4">
-            <span>ⓑ Memory Math Facts</span>
+            <span>💾 Memory Math Facts</span>
             <div class="control-box"></div>
         </div>
 
@@ -197,7 +206,7 @@
 
             <!-- Problem Display Area / Start Button -->
             <!-- Initial content set by JS to "Press here to start!" -->
-            <div id="problem-container" class="font-bold text-center p-4 bg-gray-200 border-2 border-black shadow-[2px_2px_0_0_#000] h-24 flex items-center justify-center">
+            <div id="problem-container" class="font-bold text-center p-4 border-2 border-black shadow-[2px_2px_0_0_#000] h-24 flex items-center justify-center bg-gray-200">
                 
             </div>
 
@@ -209,9 +218,8 @@
             <!-- Feedback Area -->
             <div id="feedback" class="text-xl text-center font-bold h-8 flex items-center justify-center"></div>
 
-            <!-- Control Buttons (Removed Start Button) -->
+            <!-- Control Buttons (Hidden) -->
             <div class="flex justify-center space-x-4 pt-4 border-t-2 border-black hidden">
-                <!-- Empty for alignment purposes if needed, currently hidden -->
             </div>
         </div>
     </div>
@@ -244,12 +252,17 @@
         let isQuestionPhase = false;
         let cardElements = [];
 
+        // --- Dynamic Timing Constants for Difficulty ---
+        const MEMORIZE_BASE_DURATION = 2000; // 2 seconds (ms)
+        const MEMORIZE_REDUCTION_PER_STREAK = 100; // 100ms reduction per streak point
+        const MEMORIZE_MIN_DURATION = 500; // Minimum time allowed (0.5 seconds)
+        
         // Global Constants for Weights and Problems
-        const MAX_FACTOR = 12; // Maximum factor/operand size
-        const INITIAL_WEIGHT = 100; // Starting weight for all problems
-        const WEIGHT_CORRECT_MULTIPLIER = 0.8; // Correct answer reduces weight (less practice needed)
-        const WEIGHT_INCORRECT_MULTIPLIER = 1.5; // Incorrect answer increases weight (more practice needed)
-        const operations = ['+', '-', '*', '/']; // All four operations
+        const MAX_FACTOR = 12; 
+        const INITIAL_WEIGHT = 100; 
+        const WEIGHT_CORRECT_MULTIPLIER = 0.8; 
+        const WEIGHT_INCORRECT_MULTIPLIER = 1.5; 
+        const operations = ['+', '-', '*', '/']; 
 
         // Global variable to hold problem weights for weighted selection
         let problemWeights = {};
@@ -273,8 +286,6 @@
 
         /**
          * Shuffles an array in place using the Fisher-Yates (Knuth) algorithm.
-         * @param {Array} array - The array to shuffle.
-         * @returns {Array} The shuffled array.
          */
         function shuffleArray(array) {
             for (let i = array.length - 1; i > 0; i--) {
@@ -288,11 +299,6 @@
 
         /**
          * Creates a canonical key for a problem pair to track weights consistently.
-         * Commutative ops (+, *) use sorted factors. Non-commutative (-, /) use factors in order.
-         * @param {string} op - Operation symbol.
-         * @param {number} f1 - Factor 1.
-         * @param {number} f2 - Factor 2.
-         * @returns {string} The canonical key.
          */
         function getProblemKey(op, f1, f2) {
             if (op === '+' || op === '*') {
@@ -311,14 +317,12 @@
                 for (let i = 1; i <= MAX_FACTOR; i++) {
                     for (let j = 1; j <= MAX_FACTOR; j++) {
                         if (op === '-' || op === '/') {
-                            // Only generate valid subtraction (i >= j) and division (i % j === 0 and j != 0)
                             if (i >= j && (op !== '/' || (j !== 0 && i % j === 0))) {
                                 const key = getProblemKey(op, i, j);
                                 problemWeights[key] = INITIAL_WEIGHT;
                             }
-                        } else { // Addition/Multiplication (Commutative)
+                        } else { 
                             const key = getProblemKey(op, i, j);
-                            // Check if already set (due to commutative key)
                             if (problemWeights[key] === undefined) {
                                 problemWeights[key] = INITIAL_WEIGHT;
                             }
@@ -346,7 +350,6 @@
                 const storedWeights = localStorage.getItem('cardFlipMathWeights');
                 if (storedWeights) {
                     problemWeights = JSON.parse(storedWeights);
-                    // Simple check for compatibility. If major keys are missing, re-init.
                     if (!Object.keys(problemWeights).some(key => key.includes('+') && key.includes('*'))) {
                          initializeWeights();
                     }
@@ -372,8 +375,6 @@
 
         /**
          * Updates the weight of a specific problem based on correctness.
-         * @param {string} key - The problem key (e.g., '+_5_8').
-         * @param {boolean} isCorrect - True if the answer was correct.
          */
         function updateProblemWeight(key, isCorrect) {
             if (problemWeights[key] === undefined) return;
@@ -394,12 +395,10 @@
 
         /**
          * Selects a problem based on problem weights (biased selection).
-         * @returns {{op: string, f1: number, f2: number, key: string}}
          */
         function selectWeightedProblem() {
             let problemList = [];
             
-            // Create a flat list of all problems repeated according to their weight
             for (const key in problemWeights) {
                 const weight = Math.round(problemWeights[key]);
                 if (weight > 0) {
@@ -410,7 +409,6 @@
                         f2: parseInt(f2Str),
                         key: key
                     };
-                    // Add the problem 'weight' number of times
                     for (let i = 0; i < weight; i++) {
                         problemList.push(problem);
                     }
@@ -418,33 +416,27 @@
             }
             
             if (problemList.length === 0) {
-                // Should not happen if initializeWeights runs correctly
                 console.error("No valid problems in weights system. Re-initializing.");
                 initializeWeights(); 
                 return selectWeightedProblem();
             }
 
-            // Select a problem randomly from the weighted list
             const randomIndex = Math.floor(Math.random() * problemList.length);
             return problemList[randomIndex];
         }
 
         /**
          * Generates a math problem, answer, and three decoy answers using the weighted system.
-         * @returns {{problem: string, answer: number, answers: number[], correctCardIndex: number, problemKey: string}}
          */
         function makeProblem() {
-            // 1. Select the operation and factors based on weights
             const { op, f1, f2, key } = selectWeightedProblem();
 
             let factor1, factor2, answer, problemString;
 
-            // For non-commutative ops (-, /), f1 is always the dividend/minuend (the larger number)
             if (op === '-' || op === '/') {
                 factor1 = f1;
                 factor2 = f2;
             } else {
-                // For commutative ops (+, *), randomly assign to factor1/factor2 for visual variety
                 if (Math.random() < 0.5) {
                     factor1 = f1;
                     factor2 = f2;
@@ -454,7 +446,6 @@
                 }
             }
 
-            // 2. Calculate the answer and create the display string
             switch (op) {
                 case '+':
                     answer = factor1 + factor2;
@@ -476,27 +467,22 @@
                     throw new Error("Invalid operation selected.");
             }
             
-            // 3. Generate 3 decoys (same logic as before, based on the answer)
             let decoys = [];
             while (decoys.length < 3) {
                 let decoy;
-                // Decoy logic: use offsets of 1, 2, or 5
                 const possibleOffsets = [1, 2, 5];
                 const offset = possibleOffsets[Math.floor(Math.random() * possibleOffsets.length)];
                 const sign = Math.random() < 0.5 ? 1 : -1;
                 decoy = answer + (offset * sign);
 
-                // Ensure decoy is positive, not the correct answer, unique, and is an integer
                 if (decoy > 0 && decoy !== answer && !decoys.includes(decoy) && Number.isInteger(decoy)) {
                     decoys.push(decoy);
                 }
             }
 
-            // Combine and shuffle
             const allAnswers = [answer, ...decoys];
             shuffleArray(allAnswers);
 
-            // Find the index where the correct answer ended up
             const correctCardIndex = allAnswers.indexOf(answer);
 
             return { problem: problemString, answer, answers: allAnswers, correctCardIndex, problemKey: key };
@@ -542,16 +528,15 @@
                 card.className = 'card shadow-[4px_4px_0_0_#000]';
                 card.setAttribute('data-card-id', i);
                 
-                // Card click handler is attached here
                 card.addEventListener('click', () => handleCardClick(i));
 
                 const cardFront = document.createElement('div');
                 cardFront.className = 'card-face card-front';
-                cardFront.textContent = '?'; // Placeholder, will be replaced by the answer
+                cardFront.textContent = '?'; 
 
                 const cardBack = document.createElement('div');
                 cardBack.className = 'card-face card-back text-2xl md:text-3xl';
-                cardBack.textContent = ''; // Blank card back
+                cardBack.textContent = ''; 
 
                 card.appendChild(cardFront);
                 card.appendChild(cardBack);
@@ -578,7 +563,6 @@
         /**
          * Resets the game board visually by flipping all cards back to the hidden (back) state
          * and clearing the problem area, then executes a callback.
-         * @param {function} callback - The function to call after the visual reset animation is complete.
          */
         function resetGameboard(callback) {
             // Clear text displays
@@ -603,39 +587,44 @@
             streak = 0;
             updateDisplays();
             feedback.textContent = "Get ready to memorize!";
-            // Start the first round by ensuring the board is visually reset
             resetGameboard(nextProblem);
         }
 
         function nextProblem() {
             if (!isGameActive) return;
 
-            // Reset state (text already reset by resetGameboard)
             isQuestionPhase = false;
+
+            // 1. Calculate Dynamic Memorization Duration based on streak
+            const MEMORIZE_DURATION = Math.max(
+                MEMORIZE_MIN_DURATION, 
+                MEMORIZE_BASE_DURATION - (streak * MEMORIZE_REDUCTION_PER_STREAK)
+            );
+            
+            // Update feedback to show dynamic time (for user reference)
+            const displayTime = (MEMORIZE_DURATION / 1000).toFixed(1);
 
             // Generate the new problem
             currentProblem = makeProblem();
             const { answers } = currentProblem;
 
-            // --- Timing Constants ---
-            const MEMORIZE_DURATION = 2000; // 2 seconds to view answers
+            // --- Timing Constants (Fixed animation times) ---
             const CARD_FLIP_TRANSITION_TIME = 1000; // CSS transition time is 1s
             const SEQUENTIAL_FLIP_DELAY = 300; // Delay between starting each flip
-            const QUESTION_BUFFER = 600; // Extra buffer time after last flip finishes
+            const QUESTION_BUFFER = 600; 
             const cardCount = cardElements.length;
             // --- End Timing Constants ---
             
             // 1. Setup Cards (Hidden -> Answer Flip)
             isMemorizationPhase = true;
             
-            // Prepare card content and generate a random sequence for the flip-in
             let flipInOrder = shuffleArray([0, 1, 2, 3]);
 
             cardElements.forEach((el, index) => {
-                el.card.classList.remove('flipped'); // Ensure hidden initially
+                el.card.classList.remove('flipped'); 
                 el.card.classList.remove('pointer-events-none'); 
                 el.front.textContent = answers[index];
-                el.card.style.backgroundColor = '#fff'; // Reset background color
+                el.card.style.backgroundColor = '#fff'; 
             });
 
             feedback.textContent = "Flipping cards...";
@@ -643,35 +632,31 @@
             // Sequentially flip cards to SHOW answers (Hidden -> Answer)
             flipInOrder.forEach((cardIndex, index) => {
                 setTimeout(() => {
-                     // Add 'flipped' class to show the Answer side (front)
                      cardElements[cardIndex].card.classList.add('flipped');
                 }, index * SEQUENTIAL_FLIP_DELAY);
             });
 
-            // Calculate when the initial flip animation finishes
             const initialFlipAnimationTime = (cardCount - 1) * SEQUENTIAL_FLIP_DELAY + CARD_FLIP_TRANSITION_TIME; 
 
             // 2. Start Memorization Timer after the initial flip finishes
             setTimeout(() => {
-                feedback.textContent = `Memorize the numbers (${MEMORIZE_DURATION / 1000} seconds)...`;
+                feedback.textContent = `Memorize the numbers (${displayTime} seconds)...`;
                 
                 // After memorization duration, we start the flip-back
                 setTimeout(() => {
                     isMemorizationPhase = false;
                     feedback.textContent = "Cards are flipping, memorize their order!";
                     
-                    // Generate a new random sequence for the flip-back (Answer -> Hidden)
                     let flipBackOrder = shuffleArray([0, 1, 2, 3]);
 
                     // 3. Sequentially Flip Cards (Face Down)
                     flipBackOrder.forEach((cardIndex, index) => {
                         setTimeout(() => {
-                            // Remove 'flipped' class to flip back to the Card Back side
                             cardElements[cardIndex].card.classList.remove('flipped');
                         }, index * SEQUENTIAL_FLIP_DELAY);
                     });
                     
-                    // 4. Calculate robust delay:
+                    // 4. Calculate robust delay before showing the question:
                     const totalDelayBeforeQuestion = (cardCount - 1) * SEQUENTIAL_FLIP_DELAY + CARD_FLIP_TRANSITION_TIME + QUESTION_BUFFER;
                     
                     // 5. Show Question (After all flips are finished)
@@ -681,9 +666,9 @@
                         feedback.textContent = "Which card hides the correct answer?";
                     }, totalDelayBeforeQuestion);
                     
-                }, MEMORIZE_DURATION); // Wait for memorization time
+                }, MEMORIZE_DURATION); // Wait for the calculated memorization time
                 
-            }, initialFlipAnimationTime + 50); // Wait for the initial flip animation to finish (+ buffer)
+            }, initialFlipAnimationTime + 50); // Wait for the initial flip animation to finish
         }
 
         function handleCardClick(clickedIndex) {
@@ -715,7 +700,7 @@
                 feedback.style.color = '#006400'; // Dark green for success
                 clickedCard.style.backgroundColor = '#aaffaa'; // Light green highlight
             } else {
-                streak = 0;
+                streak = 0; // Reset streak on incorrect answer!
                 feedback.textContent = `Wrong! You picked ${currentProblem.answers[clickedIndex]}. The answer was ${answer}.`;
                 feedback.style.color = '#a00000'; // Dark red for failure
                 clickedCard.style.backgroundColor = '#ffaaaa'; // Light red highlight
@@ -791,7 +776,7 @@
 
         window.onload = () => {
             loadHighScore();
-            loadWeights(); // Load or initialize the problem weights
+            loadWeights(); 
             createCards();
             updateDisplays();
             
@@ -809,3 +794,4 @@
     </script>
 </body>
 </html>
+
