@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Retro Mac Memory Math</title>
+    <title>Memory Math Cards</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load VT323 Font for the Retro Aesthetic -->
@@ -143,6 +143,38 @@
         #feedback {
             min-height: 2rem;
         }
+        
+        /* Modal Overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4); /* Dark semi-transparent background */
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+        }
+
+        /* Retro Dialog Box */
+        .retro-dialog {
+            background-color: #fff;
+            border: 2px solid #000;
+            box-shadow: 6px 6px 0 0 #000;
+            max-width: 350px;
+            width: 90%;
+            font-family: 'VT323', monospace;
+            font-size: 1.5rem;
+        }
+        .dialog-title {
+            background-color: #000;
+            color: #fff;
+            padding: 4px 8px;
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+        }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -150,7 +182,7 @@
     <div id="game-window" class="window p-4">
         <!-- Title Bar -->
         <div class="title-bar mb-4">
-            <span>💾 Memory Math Facts</span>
+            <span>⍢ Memory Math Facts</span>
             <div class="control-box"></div>
         </div>
 
@@ -158,13 +190,15 @@
             <!-- Score and Status -->
             <div class="flex justify-between text-lg md:text-xl p-2 border-b-2 border-t-2 border-black">
                 <span id="score-display">Score: 0</span>
+                <button id="reset-btn" class="retro-btn text-base p-1.5 leading-none">RESET</button>
                 <span id="streak-display">Streak: 0</span>
                 <span id="high-score-display">High: 0</span>
             </div>
 
-            <!-- Problem Display Area -->
+            <!-- Problem Display Area / Start Button -->
+            <!-- Initial content set by JS to "Press here to start!" -->
             <div id="problem-container" class="font-bold text-center p-4 bg-gray-200 border-2 border-black shadow-[2px_2px_0_0_#000] h-24 flex items-center justify-center">
-                Press START to begin!
+                
             </div>
 
             <!-- Card Grid -->
@@ -175,12 +209,29 @@
             <!-- Feedback Area -->
             <div id="feedback" class="text-xl text-center font-bold h-8 flex items-center justify-center"></div>
 
-            <!-- Control Buttons -->
-            <div class="flex justify-center space-x-4 pt-4 border-t-2 border-black">
-                <button id="start-btn" class="retro-btn p-3 text-2xl">START GAME</button>
+            <!-- Control Buttons (Removed Start Button) -->
+            <div class="flex justify-center space-x-4 pt-4 border-t-2 border-black hidden">
+                <!-- Empty for alignment purposes if needed, currently hidden -->
             </div>
         </div>
     </div>
+    
+    <!-- Reset Confirmation Dialog (Modal) -->
+    <div id="reset-dialog" class="modal-overlay">
+        <div class="retro-dialog p-4">
+            <div class="dialog-title">
+                WARNING!
+            </div>
+            <p class="mb-6 text-base md:text-xl text-center">
+                Are you sure you want to reset ALL scores and problem weights? This cannot be undone.
+            </p>
+            <div class="flex justify-around space-x-4">
+                <button id="cancel-reset" class="retro-btn p-3 text-xl w-full">CANCEL</button>
+                <button id="confirm-reset" class="retro-btn p-3 text-xl w-full bg-red-200">CONFIRM RESET</button>
+            </div>
+        </div>
+    </div>
+
 
     <script type="module">
         // Game State Variables
@@ -210,7 +261,13 @@
         const problemContainer = document.getElementById('problem-container');
         const cardGrid = document.getElementById('card-grid');
         const feedback = document.getElementById('feedback');
-        const startBtn = document.getElementById('start-btn');
+        
+        // Modal Elements
+        const resetBtn = document.getElementById('reset-btn');
+        const resetDialog = document.getElementById('reset-dialog');
+        const confirmResetBtn = document.getElementById('confirm-reset');
+        const cancelResetBtn = document.getElementById('cancel-reset');
+
 
         // --- Utility Functions ---
 
@@ -447,7 +504,6 @@
 
         function saveHighScore() {
             try {
-                // Saving high score separately from weights
                 localStorage.setItem('mathFactsHighScore', highScore.toString());
             } catch (e) {
                 console.error("Could not save high score to localStorage:", e);
@@ -506,6 +562,18 @@
         }
 
         // --- Game Flow ---
+        
+        /**
+         * Handles the initial click on the problem container to start the game.
+         */
+        function handleStartClick() {
+            if (!isGameActive) {
+                startGame();
+                // Remove start interactivity and prompt
+                problemContainer.classList.remove('cursor-pointer', 'start-prompt');
+                problemContainer.removeEventListener('click', handleStartClick);
+            }
+        }
 
         /**
          * Resets the game board visually by flipping all cards back to the hidden (back) state
@@ -533,7 +601,6 @@
             isGameActive = true;
             score = 0;
             streak = 0;
-            startBtn.textContent = 'RESTART';
             updateDisplays();
             feedback.textContent = "Get ready to memorize!";
             // Start the first round by ensuring the board is visually reset
@@ -659,7 +726,7 @@
                 correctCard.style.backgroundColor = '#aaffaa';
             }
             
-            // *** NEW: Update the weight for the problem based on correctness ***
+            // Update the weight for the problem based on correctness
             updateProblemWeight(problemKey, isCorrect);
             
             // Update High Score
@@ -675,6 +742,51 @@
             }, 2000);
         }
         
+        // --- Reset Dialog Functions ---
+
+        function showResetDialog() {
+            resetDialog.style.display = 'flex';
+        }
+
+        function hideResetDialog() {
+            resetDialog.style.display = 'none';
+        }
+
+        function resetGameData() {
+            // Reset local storage
+            localStorage.removeItem('cardFlipMathWeights');
+            localStorage.removeItem('mathFactsHighScore');
+            
+            // Reset in-memory state
+            score = 0;
+            streak = 0;
+            highScore = 0;
+            isGameActive = false;
+            isMemorizationPhase = false;
+            isQuestionPhase = false;
+            
+            // Re-initialize necessary components
+            initializeWeights(); // Re-creates default weights
+            loadHighScore();     // Loads 0
+            updateDisplays();
+            
+            // Reset the UI to initial state / Start Prompt
+            problemContainer.textContent = 'Press here to start!';
+            problemContainer.classList.add('cursor-pointer', 'start-prompt');
+            problemContainer.addEventListener('click', handleStartClick);
+            feedback.textContent = 'Weights and Scores Reset!';
+            
+            // Ensure all cards are hidden
+            cardElements.forEach(el => {
+                el.card.classList.remove('flipped');
+                el.card.classList.remove('pointer-events-none');
+                el.card.style.backgroundColor = '#fff';
+            });
+            
+            // Hide modal
+            hideResetDialog();
+        }
+        
         // --- Initialization ---
 
         window.onload = () => {
@@ -683,8 +795,15 @@
             createCards();
             updateDisplays();
             
-            // Attach event listener for the start button
-            startBtn.addEventListener('click', startGame); 
+            // Setup initial UI for start
+            problemContainer.textContent = 'Press here to start!';
+            problemContainer.classList.add('cursor-pointer', 'start-prompt');
+            
+            // Attach event listeners
+            problemContainer.addEventListener('click', handleStartClick);
+            resetBtn.addEventListener('click', showResetDialog);
+            confirmResetBtn.addEventListener('click', resetGameData);
+            cancelResetBtn.addEventListener('click', hideResetDialog);
         };
 
     </script>
