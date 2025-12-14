@@ -205,6 +205,19 @@
         // --- Utility Functions ---
 
         /**
+         * Shuffles an array in place using the Fisher-Yates (Knuth) algorithm.
+         * @param {Array} array - The array to shuffle.
+         * @returns {Array} The shuffled array.
+         */
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        /**
          * Generates a multiplication problem and three decoy answers.
          * @returns {{problem: string, answer: number, answers: number[], correctCardIndex: number}}
          */
@@ -290,7 +303,7 @@
 
                 const cardBack = document.createElement('div');
                 cardBack.className = 'card-face card-back text-2xl md:text-3xl';
-                cardBack.textContent = `CARD ${i + 1}`; // Simple text on the back
+                cardBack.textContent = ''; // Blank card back
 
                 card.appendChild(cardFront);
                 card.appendChild(cardBack);
@@ -302,6 +315,27 @@
 
         // --- Game Flow ---
 
+        /**
+         * Resets the game board visually by flipping all cards back to the hidden (back) state
+         * and clearing the problem area, then executes a callback.
+         * @param {function} callback - The function to call after the visual reset animation is complete.
+         */
+        function resetGameboard(callback) {
+            // Clear text displays
+            problemContainer.textContent = '...'; 
+            feedback.textContent = ''; 
+            
+            // Flip all cards back to the hidden (back) state
+            cardElements.forEach(el => {
+                el.card.classList.remove('flipped');
+                el.card.classList.remove('pointer-events-none');
+                el.card.style.backgroundColor = '#fff'; // Reset background color
+            });
+
+            // Wait for the flip-back animation (1000ms transition + 500ms buffer)
+            setTimeout(callback, 1500); 
+        }
+
         function startGame() {
             if (isGameActive) return;
             isGameActive = true;
@@ -310,62 +344,87 @@
             startBtn.textContent = 'RESTART';
             updateDisplays();
             feedback.textContent = "Get ready to memorize!";
-            nextProblem();
+            // Start the first round by ensuring the board is visually reset
+            resetGameboard(nextProblem);
         }
 
         function nextProblem() {
             if (!isGameActive) return;
 
-            // Reset state
+            // Reset state (text already reset by resetGameboard)
             isQuestionPhase = false;
-            problemContainer.textContent = '...';
-            feedback.textContent = '';
 
             // Generate the new problem
             currentProblem = makeProblem();
             const { answers } = currentProblem;
 
-            // Card configuration
+            // --- Timing Constants ---
             const MEMORIZE_DURATION = 2000; // 2 seconds to view answers
             const CARD_FLIP_TRANSITION_TIME = 1000; // CSS transition time is 1s
             const SEQUENTIAL_FLIP_DELAY = 300; // Delay between starting each flip
+            const QUESTION_BUFFER = 600; // Extra buffer time after last flip finishes
+            const cardCount = cardElements.length;
+            // --- End Timing Constants ---
             
-            // 1. Setup Cards (Face Up/Memorization Phase)
+            // 1. Setup Cards (Hidden -> Answer Flip)
             isMemorizationPhase = true;
+            
+            // Prepare card content and generate a random sequence for the flip-in
+            let flipInOrder = shuffleArray([0, 1, 2, 3]);
+
             cardElements.forEach((el, index) => {
-                el.card.classList.remove('flipped');
+                el.card.classList.remove('flipped'); // Ensure hidden initially
                 el.card.classList.remove('pointer-events-none'); 
                 el.front.textContent = answers[index];
                 el.card.style.backgroundColor = '#fff'; // Reset background color
             });
 
-            feedback.textContent = `Memorize the numbers (${MEMORIZE_DURATION / 1000} seconds)...`;
-
-            // 2. Start Memorization Timer
-            setTimeout(() => {
-                isMemorizationPhase = false;
-                feedback.textContent = "Cards are flipping, memorize their order!";
-                
-                // 3. Sequentially Flip Cards (Face Down)
-                cardElements.forEach((el, index) => {
-                    setTimeout(() => {
-                        el.card.classList.add('flipped');
-                    }, index * SEQUENTIAL_FLIP_DELAY);
-                });
-                
-                // 4. Calculate total time needed:
-                // Time for the last flip to START: (4 - 1) * 300ms = 900ms
-                // Time for the last flip to FINISH: 900ms + 1000ms (transition) + 100ms (safety buffer) = 2000ms
-                const totalDelayBeforeQuestion = (cardElements.length - 1) * SEQUENTIAL_FLIP_DELAY + CARD_FLIP_TRANSITION_TIME + 100;
-
-                // 5. Show Question (After all flips are finished)
+            feedback.textContent = "Flipping cards...";
+            
+            // Sequentially flip cards to SHOW answers (Hidden -> Answer)
+            flipInOrder.forEach((cardIndex, index) => {
                 setTimeout(() => {
-                    isQuestionPhase = true;
-                    problemContainer.textContent = currentProblem.problem;
-                    feedback.textContent = "Which card hides the correct answer?";
-                }, totalDelayBeforeQuestion);
+                     // Add 'flipped' class to show the Answer side (front)
+                     cardElements[cardIndex].card.classList.add('flipped');
+                }, index * SEQUENTIAL_FLIP_DELAY);
+            });
 
-            }, MEMORIZE_DURATION);
+            // Calculate when the initial flip animation finishes
+            const initialFlipAnimationTime = (cardCount - 1) * SEQUENTIAL_FLIP_DELAY + CARD_FLIP_TRANSITION_TIME; 
+
+            // 2. Start Memorization Timer after the initial flip finishes
+            setTimeout(() => {
+                feedback.textContent = `Memorize the numbers (${MEMORIZE_DURATION / 1000} seconds)...`;
+                
+                // After memorization duration, we start the flip-back
+                setTimeout(() => {
+                    isMemorizationPhase = false;
+                    feedback.textContent = "Cards are flipping, memorize their order!";
+                    
+                    // Generate a new random sequence for the flip-back (Answer -> Hidden)
+                    let flipBackOrder = shuffleArray([0, 1, 2, 3]);
+
+                    // 3. Sequentially Flip Cards (Face Down)
+                    flipBackOrder.forEach((cardIndex, index) => {
+                        setTimeout(() => {
+                            // Remove 'flipped' class to flip back to the Card Back side
+                            cardElements[cardIndex].card.classList.remove('flipped');
+                        }, index * SEQUENTIAL_FLIP_DELAY);
+                    });
+                    
+                    // 4. Calculate robust delay:
+                    const totalDelayBeforeQuestion = (cardCount - 1) * SEQUENTIAL_FLIP_DELAY + CARD_FLIP_TRANSITION_TIME + QUESTION_BUFFER;
+                    
+                    // 5. Show Question (After all flips are finished)
+                    setTimeout(() => {
+                        isQuestionPhase = true;
+                        problemContainer.textContent = currentProblem.problem;
+                        feedback.textContent = "Which card hides the correct answer?";
+                    }, totalDelayBeforeQuestion);
+                    
+                }, MEMORIZE_DURATION); // Wait for memorization time
+                
+            }, initialFlipAnimationTime + 50); // Wait for the initial flip animation to finish (+ buffer)
         }
 
         function handleCardClick(clickedIndex) {
@@ -385,9 +444,9 @@
             const { answer, correctCardIndex } = currentProblem;
             const isCorrect = (clickedIndex === correctCardIndex);
 
-            // 1. Flip the clicked card
+            // 1. Flip the clicked card to show the answer
             const clickedCard = cardElements[clickedIndex].card;
-            clickedCard.classList.remove('flipped');
+            clickedCard.classList.add('flipped'); 
             
             // 2. Process Result
             if (isCorrect) {
@@ -404,7 +463,7 @@
                 
                 // Show the correct card as well
                 const correctCard = cardElements[correctCardIndex].card;
-                correctCard.classList.remove('flipped');
+                correctCard.classList.add('flipped'); // Flip the correct card to show the answer
                 correctCard.style.backgroundColor = '#aaffaa';
             }
             
@@ -415,8 +474,10 @@
             }
             updateDisplays();
             
-            // 3. Wait for feedback and start next problem
-            setTimeout(nextProblem, 2000);
+            // 3. Wait for feedback (2000ms), then reset the board and start the next problem
+            setTimeout(() => {
+                resetGameboard(nextProblem);
+            }, 2000);
         }
         
         // --- Initialization ---
