@@ -193,6 +193,16 @@
         let isQuestionPhase = false;
         let cardElements = [];
 
+        // Global Constants for Weights and Problems
+        const MAX_FACTOR = 12; // Maximum factor/operand size
+        const INITIAL_WEIGHT = 100; // Starting weight for all problems
+        const WEIGHT_CORRECT_MULTIPLIER = 0.8; // Correct answer reduces weight (less practice needed)
+        const WEIGHT_INCORRECT_MULTIPLIER = 1.5; // Incorrect answer increases weight (more practice needed)
+        const operations = ['+', '-', '*', '/']; // All four operations
+
+        // Global variable to hold problem weights for weighted selection
+        let problemWeights = {};
+
         // DOM Elements
         const scoreDisplay = document.getElementById('score-display');
         const streakDisplay = document.getElementById('streak-display');
@@ -216,46 +226,228 @@
             }
             return array;
         }
+        
+        // --- Weight System Functions ---
 
         /**
-         * Generates a multiplication problem and three decoy answers.
-         * @returns {{problem: string, answer: number, answers: number[], correctCardIndex: number}}
+         * Creates a canonical key for a problem pair to track weights consistently.
+         * Commutative ops (+, *) use sorted factors. Non-commutative (-, /) use factors in order.
+         * @param {string} op - Operation symbol.
+         * @param {number} f1 - Factor 1.
+         * @param {number} f2 - Factor 2.
+         * @returns {string} The canonical key.
+         */
+        function getProblemKey(op, f1, f2) {
+            if (op === '+' || op === '*') {
+                const [a, b] = [f1, f2].sort((a, b) => a - b);
+                return `${op}_${a}_${b}`;
+            }
+            return `${op}_${f1}_${f2}`;
+        }
+
+        /**
+         * Initializes the problem weights for all possible combinations up to MAX_FACTOR.
+         */
+        function initializeWeights() {
+            problemWeights = {};
+            for (const op of operations) {
+                for (let i = 1; i <= MAX_FACTOR; i++) {
+                    for (let j = 1; j <= MAX_FACTOR; j++) {
+                        if (op === '-' || op === '/') {
+                            // Only generate valid subtraction (i >= j) and division (i % j === 0 and j != 0)
+                            if (i >= j && (op !== '/' || (j !== 0 && i % j === 0))) {
+                                const key = getProblemKey(op, i, j);
+                                problemWeights[key] = INITIAL_WEIGHT;
+                            }
+                        } else { // Addition/Multiplication (Commutative)
+                            const key = getProblemKey(op, i, j);
+                            // Check if already set (due to commutative key)
+                            if (problemWeights[key] === undefined) {
+                                problemWeights[key] = INITIAL_WEIGHT;
+                            }
+                        }
+                    }
+                }
+            }
+            // Set division by 1 and self to lower weight initially (too easy)
+            for (let i = 1; i <= MAX_FACTOR; i++) {
+                if (problemWeights[getProblemKey('/', i, 1)]) {
+                    problemWeights[getProblemKey('/', i, 1)] = INITIAL_WEIGHT * 0.5;
+                }
+                if (problemWeights[getProblemKey('/', i, i)]) {
+                    problemWeights[getProblemKey('/', i, i)] = INITIAL_WEIGHT * 0.5;
+                }
+            }
+            saveWeights();
+        }
+
+        /**
+         * Loads problem weights from localStorage. Initializes if none found.
+         */
+        function loadWeights() {
+            try {
+                const storedWeights = localStorage.getItem('cardFlipMathWeights');
+                if (storedWeights) {
+                    problemWeights = JSON.parse(storedWeights);
+                    // Simple check for compatibility. If major keys are missing, re-init.
+                    if (!Object.keys(problemWeights).some(key => key.includes('+') && key.includes('*'))) {
+                         initializeWeights();
+                    }
+                } else {
+                    initializeWeights();
+                }
+            } catch (e) {
+                console.error("Could not load weights, initializing defaults:", e);
+                initializeWeights();
+            }
+        }
+
+        /**
+         * Saves current problem weights to localStorage.
+         */
+        function saveWeights() {
+            try {
+                localStorage.setItem('cardFlipMathWeights', JSON.stringify(problemWeights));
+            } catch (e) {
+                console.error("Could not save weights to localStorage:", e);
+            }
+        }
+
+        /**
+         * Updates the weight of a specific problem based on correctness.
+         * @param {string} key - The problem key (e.g., '+_5_8').
+         * @param {boolean} isCorrect - True if the answer was correct.
+         */
+        function updateProblemWeight(key, isCorrect) {
+            if (problemWeights[key] === undefined) return;
+            
+            let currentWeight = problemWeights[key];
+            
+            if (isCorrect) {
+                // Decrease weight (max 10, min 500)
+                currentWeight = Math.max(10, currentWeight * WEIGHT_CORRECT_MULTIPLIER);
+            } else {
+                // Increase weight (max 500, min 10)
+                currentWeight = Math.min(500, currentWeight * WEIGHT_INCORRECT_MULTIPLIER);
+            }
+            
+            problemWeights[key] = currentWeight;
+            saveWeights();
+        }
+
+        /**
+         * Selects a problem based on problem weights (biased selection).
+         * @returns {{op: string, f1: number, f2: number, key: string}}
+         */
+        function selectWeightedProblem() {
+            let problemList = [];
+            
+            // Create a flat list of all problems repeated according to their weight
+            for (const key in problemWeights) {
+                const weight = Math.round(problemWeights[key]);
+                if (weight > 0) {
+                    const [op, f1Str, f2Str] = key.split('_');
+                    const problem = {
+                        op: op,
+                        f1: parseInt(f1Str),
+                        f2: parseInt(f2Str),
+                        key: key
+                    };
+                    // Add the problem 'weight' number of times
+                    for (let i = 0; i < weight; i++) {
+                        problemList.push(problem);
+                    }
+                }
+            }
+            
+            if (problemList.length === 0) {
+                // Should not happen if initializeWeights runs correctly
+                console.error("No valid problems in weights system. Re-initializing.");
+                initializeWeights(); 
+                return selectWeightedProblem();
+            }
+
+            // Select a problem randomly from the weighted list
+            const randomIndex = Math.floor(Math.random() * problemList.length);
+            return problemList[randomIndex];
+        }
+
+        /**
+         * Generates a math problem, answer, and three decoy answers using the weighted system.
+         * @returns {{problem: string, answer: number, answers: number[], correctCardIndex: number, problemKey: string}}
          */
         function makeProblem() {
-            // Factors between 2 and 11
-            const factor1 = Math.floor(Math.random() * 10) + 2;
-            const factor2 = Math.floor(Math.random() * 10) + 2;
-            const answer = factor1 * factor2;
-            const problem = `${factor1} \u00D7 ${factor2}`; // Multiplication symbol
+            // 1. Select the operation and factors based on weights
+            const { op, f1, f2, key } = selectWeightedProblem();
 
-            // Generate 3 decoys
+            let factor1, factor2, answer, problemString;
+
+            // For non-commutative ops (-, /), f1 is always the dividend/minuend (the larger number)
+            if (op === '-' || op === '/') {
+                factor1 = f1;
+                factor2 = f2;
+            } else {
+                // For commutative ops (+, *), randomly assign to factor1/factor2 for visual variety
+                if (Math.random() < 0.5) {
+                    factor1 = f1;
+                    factor2 = f2;
+                } else {
+                    factor1 = f2;
+                    factor2 = f1;
+                }
+            }
+
+            // 2. Calculate the answer and create the display string
+            switch (op) {
+                case '+':
+                    answer = factor1 + factor2;
+                    problemString = `${factor1} + ${factor2}`;
+                    break;
+                case '-':
+                    answer = factor1 - factor2;
+                    problemString = `${factor1} - ${factor2}`;
+                    break;
+                case '*':
+                    answer = factor1 * factor2;
+                    problemString = `${factor1} \u00D7 ${factor2}`;
+                    break;
+                case '/':
+                    answer = factor1 / factor2;
+                    problemString = `${factor1} \u00F7 ${factor2}`;
+                    break;
+                default:
+                    throw new Error("Invalid operation selected.");
+            }
+            
+            // 3. Generate 3 decoys (same logic as before, based on the answer)
             let decoys = [];
             while (decoys.length < 3) {
                 let decoy;
-                // Generate a random offset (1, 2, or 5)
+                // Decoy logic: use offsets of 1, 2, or 5
                 const possibleOffsets = [1, 2, 5];
                 const offset = possibleOffsets[Math.floor(Math.random() * possibleOffsets.length)];
                 const sign = Math.random() < 0.5 ? 1 : -1;
                 decoy = answer + (offset * sign);
 
-                // Ensure decoy is positive, not the correct answer, and unique
-                if (decoy > 0 && decoy !== answer && !decoys.includes(decoy)) {
+                // Ensure decoy is positive, not the correct answer, unique, and is an integer
+                if (decoy > 0 && decoy !== answer && !decoys.includes(decoy) && Number.isInteger(decoy)) {
                     decoys.push(decoy);
                 }
             }
 
             // Combine and shuffle
             const allAnswers = [answer, ...decoys];
-            allAnswers.sort(() => Math.random() - 0.5);
+            shuffleArray(allAnswers);
 
             // Find the index where the correct answer ended up
             const correctCardIndex = allAnswers.indexOf(answer);
 
-            return { problem, answer, answers: allAnswers, correctCardIndex };
+            return { problem: problemString, answer, answers: allAnswers, correctCardIndex, problemKey: key };
         }
 
         function saveHighScore() {
             try {
+                // Saving high score separately from weights
                 localStorage.setItem('mathFactsHighScore', highScore.toString());
             } catch (e) {
                 console.error("Could not save high score to localStorage:", e);
@@ -441,7 +633,7 @@
             isQuestionPhase = false;
             cardElements.forEach(el => el.card.classList.add('pointer-events-none'));
 
-            const { answer, correctCardIndex } = currentProblem;
+            const { answer, correctCardIndex, problemKey } = currentProblem;
             const isCorrect = (clickedIndex === correctCardIndex);
 
             // 1. Flip the clicked card to show the answer
@@ -467,6 +659,9 @@
                 correctCard.style.backgroundColor = '#aaffaa';
             }
             
+            // *** NEW: Update the weight for the problem based on correctness ***
+            updateProblemWeight(problemKey, isCorrect);
+            
             // Update High Score
             if (score > highScore) {
                 highScore = score;
@@ -484,6 +679,7 @@
 
         window.onload = () => {
             loadHighScore();
+            loadWeights(); // Load or initialize the problem weights
             createCards();
             updateDisplays();
             
