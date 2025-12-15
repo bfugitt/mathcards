@@ -254,8 +254,8 @@
 
         // --- Dynamic Timing Constants for Difficulty ---
         const MEMORIZE_BASE_DURATION = 2000; // 2 seconds (ms)
-        const MEMORIZE_REDUCTION_PER_STREAK = 100; // 100ms reduction per streak point
-        const MEMORIZE_MIN_DURATION = 500; // Minimum time allowed (0.5 seconds)
+        const MEMORIZE_REDUCTION_PER_STREAK = 200; // 100ms reduction per streak point
+        const MEMORIZE_MIN_DURATION = 400; // Minimum time allowed (0.5 seconds)
         
         // Global Constants for Weights and Problems
         const MAX_FACTOR = 12; 
@@ -609,9 +609,9 @@
             const { answers } = currentProblem;
 
             // --- Timing Constants (Fixed animation times) ---
-            const CARD_FLIP_TRANSITION_TIME = 1000; // CSS transition time is 1s
+            const CARD_FLIP_TRANSITION_TIME = 750; // CSS transition time is 1s (1000)
             const SEQUENTIAL_FLIP_DELAY = 300; // Delay between starting each flip
-            const QUESTION_BUFFER = 600; 
+            const QUESTION_BUFFER = 500; //600
             const cardCount = cardElements.length;
             // --- End Timing Constants ---
             
@@ -724,7 +724,7 @@
             // 3. Wait for feedback (2000ms), then reset the board and start the next problem
             setTimeout(() => {
                 resetGameboard(nextProblem);
-            }, 2000);
+            }, 1500); //2000
         }
         
         // --- Reset Dialog Functions ---
